@@ -1,4 +1,4 @@
-````markdown
+
 # Galatiq Invoice Processing Workflow
 
 A local-first, agentic invoice processing workflow built for the Galatiq AI take-home assessment.
