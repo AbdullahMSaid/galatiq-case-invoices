@@ -1,135 +1,149 @@
+<div align="center">
 
-# Galatiq Invoice Processing Workflow
+# 🧾 Invoice Processing Workflow
 
-A local-first, agentic invoice processing workflow built for the Galatiq AI take-home assessment.
+**A local-first, multi-agent invoice pipeline — ingest → validate → approve → pay — with LLM reasoning and a self-critique loop.**
 
-This system ingests invoices across multiple file types, extracts a normalized invoice representation, validates the invoice against a mock inventory database, simulates an approval workflow with LLM reasoning + reflection, and only executes payment when the invoice is approved.
+[![Python](https://img.shields.io/badge/Python-3.9-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![LangGraph](https://img.shields.io/badge/Orchestration-LangGraph-1C3C3C)](https://langchain-ai.github.io/langgraph/)
+[![Claude](https://img.shields.io/badge/LLM-Claude%20Sonnet%204.6-D97757)](https://www.anthropic.com/)
+[![Streamlit](https://img.shields.io/badge/UI-Streamlit-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![Tests](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)](https://docs.pytest.org/)
+[![Runs Offline](https://img.shields.io/badge/runtime-local--first-success)](#)
+
+</div>
 
 ---
 
-## Quickstart
+Built for the Galatiq AI take-home. The system ingests invoices across five file formats,
+normalizes them into a single schema, validates them against a mock inventory database,
+simulates a VP-style approval with **LLM reasoning plus a reflection/critique pass**, and
+executes a (mocked) payment **only** when the invoice is approved — all runnable locally
+with no external infrastructure.
 
-From the repository root:
+> **TL;DR** — Deterministic where business rules belong, agentic where judgment belongs.
+> JSON is parsed in plain Python; messy TXT/PDF/CSV/XML go through Claude; inventory and
+> data-integrity checks are pure rules; approval is an LLM that critiques its own decision
+> before committing.
+
+---
+
+## ✨ Highlights
+
+- **Four-stage LangGraph pipeline** with shared, append-only audit state.
+- **Hybrid ingestion** — deterministic JSON parsing; LLM extraction for noisy formats.
+- **Self-correcting approval** — an approver LLM followed by a reflection pass that can
+  overturn the first decision, and **fails safe to reject** on any error.
+- **Deterministic validation** — SKU normalization, per-SKU quantity aggregation, and
+  inventory/data-integrity checks against local SQLite.
+- **Streamlit review console** — pick or upload an invoice, run the workflow, and inspect
+  every stage with KPIs, an embedded file preview, a status timeline, and the audit log.
+- **Tested** — an offline pytest suite (no API cost) plus one end-to-end integration test.
+- **Local-first** — no internet, no real money; one command seeds a reproducible inventory.
+
+---
+
+## 🚀 Quickstart
 
 ```bash
-./venv/bin/python -m invoice_agents.db.seed
-./venv/bin/python main.py --invoice_path data/invoices/invoice_1001.txt
-````
-
-If you are not using the included virtual environment:
-
-```bash
+# 1. install (use ./venv/bin/python if the bundled venv was moved on disk)
 pip install -r requirements.txt
+
+# 2. add your key
+echo "ANTHROPIC_API_KEY=your_key_here" > .env
+
+# 3. seed the local inventory database
 python -m invoice_agents.db.seed
+
+# 4a. run one invoice end-to-end on the CLI
 python main.py --invoice_path data/invoices/invoice_1001.txt
+
+# 4b. …or launch the visual review console
+python -m streamlit run streamlit_app.py
 ```
 
----
-
-## Overview
-
-The workflow has four stages:
-
-1. **Ingestion**
-
-   * Reads invoices from TXT, JSON, CSV, XML, and PDF
-   * Uses deterministic parsing for structured formats
-   * Uses an LLM to extract structured data from messy TXT / PDF invoices with OCR-like errors, inconsistent labels, and noisy formatting
-
-2. **Validation**
-
-   * Checks parsed invoices against a local SQLite inventory database
-   * Flags missing fields, negative values, unknown items, stock issues, currency mismatches, and high-value invoices
-
-3. **Approval**
-
-   * Uses validation findings plus LLM reasoning to simulate an approval / rejection decision
-   * Includes a reflection pass to critique the initial decision before finalizing it
-
-4. **Payment**
-
-   * Simulates payment only for approved invoices
-   * Keeps payment local / mocked for the scope of the take-home
+> JSON invoices are parsed locally and need no key. TXT/PDF/CSV/XML call the Claude API.
 
 ---
 
-## System Architecture
+## 🏛️ Architecture
 
 ```text
                     ┌─────────────────────────┐
                     │      Input Invoice      │
-                    │ txt / json / csv / xml │
-                    │          / pdf          │
+                    │  txt · json · csv ·     │
+                    │       xml · pdf         │
                     └────────────┬────────────┘
-                                 │
                                  ▼
                     ┌─────────────────────────┐
                     │        INGESTION        │
-                    │-------------------------│
-                    │ Structured parsers for  │
-                    │ JSON / CSV / XML        │
-                    │                         │
-                    │ LLM extraction for      │
-                    │ TXT / PDF               │
+                    │ ─────────────────────── │
+                    │ JSON → Python parser    │
+                    │ TXT/PDF/CSV/XML → Claude│
+                    │ → canonical parsed dict │
                     └────────────┬────────────┘
-                                 │
                                  ▼
                     ┌─────────────────────────┐
                     │       VALIDATION        │
-                    │-------------------------│
+                    │ ─────────────────────── │
+                    │ SKU normalize+aggregate │
                     │ SQLite inventory checks │
-                    │ Data-integrity checks   │
-                    │ Currency / amount flags │
+                    │ data-integrity + flags  │
                     └────────────┬────────────┘
-                                 │
                                  ▼
                     ┌─────────────────────────┐
                     │        APPROVAL         │
-                    │-------------------------│
-                    │ LLM approval decision   │
-                    │ + reflection / critique │
+                    │ ─────────────────────── │
+                    │ LLM approver →          │
+                    │ reflection / critique → │
+                    │ final decision          │
                     └────────────┬────────────┘
-                                 │
-                   approved      │      rejected
-                                 ▼
-                    ┌─────────────────────────┐
-                    │         PAYMENT         │
-                    │-------------------------│
-                    │ Mock payment execution  │
-                    │ for approved invoices   │
-                    └─────────────────────────┘
+                approved ◄───────┴───────► rejected
+                    ▼                          ▼
+        ┌───────────────────┐      ┌───────────────────┐
+        │      PAYMENT      │      │   LOG REJECTION   │
+        │ mock pay, mint    │      │ record reasoning, │
+        │ PAY-id, success   │      │ skip payment      │
+        └───────────────────┘      └───────────────────┘
 ```
+
+The four stages are LangGraph nodes wired
+`START → ingest → validate → approve → {pay | reject} → END`. State is a `TypedDict`;
+each node returns a partial dict that LangGraph merges. The `logs` field uses an
+`Annotated[list[str], operator.add]` **reducer**, so every stage *appends* to a single
+audit trail rather than overwriting it.
 
 ---
 
-## Repository Structure
+## 📂 Repository structure
 
 ```text
 .
-├── data/
-│   └── invoices/                  # sample invoices from the take-home
+├── data/invoices/                 # 20 sample invoices (clean → adversarial)
 ├── invoice_agents/
-│   ├── __init__.py
-│   ├── graph.py                   # LangGraph workflow definition
-│   ├── state.py                   # shared workflow state
-│   ├── db/
-│   │   ├── __init__.py
-│   │   └── seed.py                # seeds local inventory.db
-│   └── agents/
-│       ├── ingestion.py           # parse + normalize invoice data
-│       ├── validation.py          # deterministic invoice checks
-│       ├── approval.py            # LLM decision + reflection pass
-│       └── payment.py             # mock payment step
+│   ├── state.py                   # InvoiceState — the shared, typed workflow contract
+│   ├── graph.py                   # build_graph() — the LangGraph wiring
+│   ├── agents/
+│   │   ├── ingestion.py           # parse / LLM-extract → canonical invoice
+│   │   ├── validation.py          # deterministic inventory + integrity checks
+│   │   ├── approval.py            # LLM decision + reflection pass (fails safe)
+│   │   └── payment.py             # mock payment / rejection logging
+│   ├── tools/
+│   │   ├── inventory.py           # read-only inventory lookup
+│   │   └── payment.py             # mock_payment stub
+│   └── db/seed.py                 # seeds the local inventory.db
+├── tests/                         # pytest suite (offline + 1 integration)
 ├── main.py                        # CLI entrypoint
+├── streamlit_app.py               # Streamlit review console
 ├── requirements.txt
 └── README.md
 ```
 
 ---
 
-## Canonical Invoice Shape
+## 🧩 Canonical invoice shape
 
-All invoice formats are normalized into a common structure so downstream stages can operate on a single schema.
+Every format is normalized into one structure, so each downstream stage sees a single schema:
 
 ```python
 {
@@ -137,507 +151,173 @@ All invoice formats are normalized into a common structure so downstream stages 
     "vendor": str | None,
     "invoice_date": str | None,
     "due_date": str | None,
-    "currency": str,
+    "currency": str,                 # defaults to "USD" when unstated
     "total_amount": float | None,
     "line_items": [
-        {
-            "item": str | None,
-            "quantity": int | float | None,
-            "unit_price": float | None,
-        }
+        {"item": str | None, "quantity": int | float | None, "unit_price": float | None}
     ],
     "source_file": str,
     "source_format": str,
-    "extraction_notes": list[str],
+    "extraction_notes": list[str],   # uncertainty / OCR ambiguity / fraud signals
 }
 ```
 
 ---
 
-## Workflow Design
+## 🔍 How each stage works
 
-## 1) Ingestion
+### 1 · Ingestion — hybrid parsing
 
-The ingestion stage reads the invoice file, detects the file type, and produces a canonical `parsed_invoice` object.
+| Format | Strategy | Why |
+| --- | --- | --- |
+| **JSON** | Deterministic Python (`_parse_json_invoice`) | Already structured — cheap, reliable, debuggable. |
+| **TXT · PDF · CSV · XML** | LLM extraction (Claude + Pydantic `with_structured_output`) | This is where the dataset hides OCR corruption, missing labels, email wrappers, and noisy line-item layouts — exactly where agentic extraction earns its keep. |
 
-### Parsing strategy
+PDF text is pulled with `pdfplumber` first. The extraction prompt is tuned to fix
+OCR-style transcription (`2O26` → `2026`), exclude subtotal/tax/total rows from line items,
+**preserve suspicious values verbatim** (a negative quantity, a `"yesterday"` due date),
+and record item names exactly as written — canonicalization is validation's job.
 
-#### Deterministic parsing
+### 2 · Validation — deterministic by design
 
-Used for:
+Inventory, quantity, and currency checks are **business rules, not reasoning problems**, so
+they're pure code: reliable, reproducible, debuggable, and free. The stage:
 
-* JSON
-* CSV
-* XML
+- **normalizes item names** — strips parentheticals, collapses spacing (`"Widget A"` →
+  `WidgetA`), and drops trailing annotation words (`"GadgetX Expedited"` → `GadgetX`), while
+  leaving genuinely unknown items (`WidgetC`) intact;
+- **aggregates quantities per real SKU** before checking stock (so repeated/annotated lines
+  add up correctly);
+- emits **issues** (blocking) and **warnings** (advisory), and sets `requires_manual_review`.
 
-These formats already contain structured fields, so they are parsed directly in Python.
+<details><summary><b>Checks implemented</b></summary>
 
-#### LLM extraction
+**Invoice-level:** missing vendor *(blocking issue)*, missing total, non-positive total,
+non-USD currency *(warning + manual review)*, total below line-item subtotal *(warning)*.
 
-Used for:
+**Line-item:** missing name, missing quantity, non-positive quantity, item not in
+inventory, requested quantity exceeds available stock, out-of-stock item.
 
-* TXT
-* PDF
+</details>
 
-These are the formats where the evaluation set introduces ambiguity:
+### 3 · Approval — LLM with a reflection loop
 
-* OCR-like corruption
-* inconsistent field labels
-* email wrappers
-* misspellings
-* noisy line-item layouts
+Validation answers *"what's wrong?"*; approval answers *"given these findings, should we
+pay?"* — an inherently contextual question (data-quality issue vs. fraud signal,
+high-value-but-legitimate vs. high-value-and-suspicious). So approval is agentic:
 
-For these formats, the workflow uses Claude to normalize the invoice into the shared schema above.
+1. builds rule-based context (>$10K scrutiny threshold, validation flags, extraction notes);
+2. an **approver** LLM proposes approve/reject with reasoning;
+3. a **reflection/critique** LLM independently audits and can overturn it;
+4. the reflection's verdict is final — and on **any** LLM/API error it **fails safe to reject**.
 
-### Why hybrid parsing?
+### 4 · Payment — mocked, branch-aware
 
-I intentionally did **not** use an LLM for every file. JSON / CSV / XML are cheaper, more reliable, and easier to debug with deterministic parsing. TXT / PDF are where agentic extraction actually adds value.
-
----
-
-## 2) Validation
-
-Validation is intentionally deterministic rather than LLM-driven.
-
-The validation stage checks the parsed invoice against a local SQLite inventory database and produces issues / warnings that feed the approval stage.
-
-### Validation checks currently implemented
-
-#### Invoice-level checks
-
-* missing vendor
-* missing invoice number
-* missing due date
-* missing total amount
-* non-positive total amount
-* non-USD currency warning
-* high-value invoice warning / escalation
-
-#### Line-item checks
-
-* missing item name
-* missing quantity
-* non-positive quantity
-* item not found in inventory
-* item exists but requested quantity exceeds available stock
-
-### Inventory model
-
-A local `inventory.db` is seeded with a small inventory table (e.g. `WidgetA`, `WidgetB`, `GadgetX`, `FakeItem`) so the workflow is self-contained and reproducible.
-
-### Why deterministic validation?
-
-Inventory checks, quantity checks, and currency checks are business rules, not reasoning problems. Keeping them deterministic makes the workflow easier to debug, cheaper to run, and more trustworthy.
+Approved → `mock_payment()` mints a `PAY-xxxxxxxx` id and records `success`. Rejected → the
+rejection reasoning is logged and payment is skipped. Mocking keeps the take-home focused on
+workflow design rather than payment-rail integration.
 
 ---
 
-## 3) Approval
-
-Approval is treated as a reasoning stage rather than a pure rule engine.
-
-The approval stage consumes:
-
-* the parsed invoice
-* validation issues / warnings
-* suspicious extraction notes from ingestion
-
-It then produces:
-
-* an initial approval decision
-* a reflection / critique pass
-* a final decision
-* reasoning explaining the decision
-
-### Why use an LLM here?
-
-Validation answers **“what is wrong?”**
-Approval answers **“given these findings, should we pay this invoice?”**
-
-That second question is inherently more contextual:
-
-* Is this a data-quality issue or a fraud signal?
-* Is this a stock problem or a reason to reject payment entirely?
-* Is this high-value but legitimate, or high-value and suspicious?
-
-Using an LLM here let me keep validation deterministic while still showing an agentic approval step with self-correction.
-
----
-
-## 4) Payment
-
-Payment is intentionally mocked.
-
-If the final approval decision is `approved`, the workflow generates a mock payment ID and records a successful payment status.
-
-If the invoice is rejected, payment is skipped.
-
-This keeps the take-home focused on workflow design and reasoning rather than external payment integrations.
-
----
-
-## How to Run
-
-## 1. Install dependencies
+## 🖥️ Streamlit review console
 
 ```bash
-pip install -r requirements.txt
+python -m streamlit run streamlit_app.py
 ```
 
-If your local virtual environment was moved on disk, prefer:
+A polished demo UI that imports and invokes the **same** LangGraph pipeline (no logic
+duplicated). It lets a reviewer:
+
+- pick a sample invoice **or upload their own** (txt/json/csv/xml/pdf);
+- see top **KPI cards** — vendor, total, currency, final decision, payment status;
+- preview the **original file** — text formats inline, PDFs embedded with a download fallback;
+- walk a **stage timeline** with status icons, plain-language summaries, and expandable raw JSON;
+- read the full **audit log**.
+
+It's dark-mode safe (theme-aware styling), and surfaces clear setup errors — a missing
+`inventory.db` or a missing `ANTHROPIC_API_KEY` for LLM formats.
+
+---
+
+## ✅ Testing
 
 ```bash
-./venv/bin/python -m pip install -r requirements.txt
+python -m pytest -m "not integration"   # 8 offline tests — no API cost
+python -m pytest -m integration         # 1 end-to-end test — needs ANTHROPIC_API_KEY
 ```
 
-## 2. Add your Anthropic API key
+| Test file | Covers |
+| --- | --- |
+| `test_seed.py` | Seeding builds the canonical inventory + idempotency. |
+| `test_ingestion.py` | Deterministic JSON parsing of vendor + line items. |
+| `test_validation.py` | Overstock, missing-vendor-as-issue, **annotated-SKU aggregation**, unknown-item preservation, non-USD → manual review. |
+| `test_graph.py` | Full graph: clean invoice → approved → payment success *(integration)*. |
 
-Create a `.env` file in the repo root:
-
-```env
-ANTHROPIC_API_KEY=your_key_here
-```
-
-## 3. Seed the local inventory database
-
-```bash
-./venv/bin/python -m invoice_agents.db.seed
-```
-
-## 4. Run a single invoice end-to-end
-
-```bash
-./venv/bin/python main.py --invoice_path data/invoices/invoice_1001.txt
-```
+Validation tests run against a **temporary** seeded database and never touch the real
+`inventory.db`; LLM-format extraction is stubbed with static parsed dicts so the offline
+suite is fast, free, and deterministic.
 
 ---
 
-## Example Test Runs
+## 🧪 Representative behaviors
 
-I ran the workflow end-to-end on a representative set of invoices covering clean, malformed, suspicious, high-value, PDF, and non-USD scenarios.
+| Invoice | Type | Scenario | Validation | Final | Why |
+| --- | :--: | --- | --- | --- | --- |
+| `invoice_1001.txt` | TXT | clean baseline | passed | ✅ **approved** | valid vendor, totals, and stock |
+| `invoice_1002.txt` | TXT | typos + overstock + high-value | failed | ⛔ **rejected** | `GadgetX` exceeds stock |
+| `invoice_1003.txt` | TXT | fraud-style (urgent wire, fake item) | failed | ⛔ **rejected** | out-of-stock `FakeItem` + fraud signals |
+| `invoice_1009.json` | JSON | broken data integrity | failed | ⛔ **rejected** | negative total & quantity, **missing vendor** |
+| `invoice_1013.pdf` | PDF | repeated/annotated SKUs + high-value | failed | ⛔ **rejected** | SKUs aggregate (WidgetA 22>15, GadgetX 9>5); +$50 total discrepancy |
+| `invoice_1014.xml` | XML | valid invoice in EUR | passed + ⚠️ review | ⛔ **rejected** | non-USD → flagged for manual review |
 
-## Summary Table
+A couple worth calling out:
 
-| Invoice             | Type | Scenario                                 | Validation Result              | Final Decision                  | Notes                                                     |
-| ------------------- | ---: | ---------------------------------------- | ------------------------------ | ------------------------------- | --------------------------------------------------------- |
-| `invoice_1001.txt`  |  TXT | clean baseline                           | passed                         | **approved**                    | valid vendor, valid totals, inventory OK                  |
-| `invoice_1002.txt`  |  TXT | typo-heavy + overstock + high-value      | failed                         | **rejected**                    | `GadgetX` quantity exceeds stock                          |
-| `invoice_1003.txt`  |  TXT | fraud-style / urgent payment / fake item | failed                         | **rejected**                    | out-of-stock fake item + suspicious language              |
-| `invoice_1009.json` | JSON | broken data integrity                    | failed                         | **rejected**                    | negative total, negative quantity, missing vendor         |
-| `invoice_1013.pdf`  |  PDF | repeated items + high-value              | failed                         | **rejected**                    | overstock + current normalization gaps for annotated SKUs |
-| `invoice_1014.xml`  |  XML | valid invoice in EUR                     | validation passed with warning | **rejected (current behavior)** | currency mismatch                                         |
-
----
-
-## Representative Behaviors by Invoice
-
-## `invoice_1001.txt` — clean baseline
-
-**Outcome:** Approved and paid.
-
-The workflow:
-
-* extracted the invoice cleanly
-* validated stock and totals successfully
-* approved the invoice
-* generated a mock payment ID
-
-This is the “happy path” baseline.
+- **`invoice_1013.pdf`** stresses SKU handling: its lines include `GadgetX (Expedited)`,
+  `GadgetX (Sample)`, and `WidgetA (Replacement)`. Normalization folds these back to base
+  SKUs and aggregates quantities, so the genuine over-order is caught instead of being
+  mislabeled "unknown item."
+- **`invoice_1014.xml`** parses cleanly but is EUR-denominated. Validation flags it for
+  **manual review**; approval currently rejects on currency mismatch — kept visible as a
+  policy decision point (see Limitations).
 
 ---
 
-## `invoice_1002.txt` — messy TXT + overstock
+## 🧠 Design decisions
 
-This file contains abbreviated / corrupted fields such as:
-
-* `INVOCE`
-* `Vndr`
-* `Inv #`
-* `Dt`
-* `Due Dt`
-
-### Ingestion cleanup
-
-The ingestion stage normalized those into canonical invoice fields and preserved its interpretation in `extraction_notes`, including:
-
-* `Vndr` → vendor
-* `Inv #` → invoice number
-* `Dt` → invoice date
-* `Due Dt` → due date
-
-### Validation result
-
-The invoice was flagged because:
-
-* `GadgetX` requested quantity exceeded available stock
-
-### Final outcome
-
-Rejected.
+- **Hybrid parsing over "LLM for everything."** Structured formats are parsed
+  deterministically; the LLM is reserved for genuinely messy input. Lower cost, more
+  predictable, easier to debug.
+- **Deterministic validation.** Inventory/quantity/currency are rules, not judgment —
+  keeping them out of the LLM makes results trustworthy and reproducible.
+- **Agentic approval with self-critique.** A reflection pass lets the system combine weak
+  signals, interpret fraud-style language, and second-guess itself — more than "parser +
+  if/else," without making every stage opaque.
+- **Fail safe.** Any approval-path error resolves to *reject*, never an accidental payment.
 
 ---
 
-## `invoice_1003.txt` — suspicious / fraud-style invoice
+## ⚠️ Limitations & roadmap
 
-This invoice includes multiple signals of fraud or bad data:
+Honest about where the next iteration should go:
 
-* vendor name: `Fraudster LLC`
-* due date set to literal `"yesterday"`
-* immediate wire-pressure language
-* line item `FakeItem`
-* high total amount
-
-### Ingestion cleanup
-
-The LLM extraction successfully structured the invoice and preserved the suspicious aspects in `extraction_notes`.
-
-### Validation result
-
-* `FakeItem` is out of stock / invalid for the seeded inventory
-
-### Final outcome
-
-Rejected.
+- **No `subtotal`/`tax` in the schema.** A total above the line-item subtotal is currently
+  assumed to be tax/fees. Adding `subtotal` + `tax_amount` would let validation
+  *deterministically* catch discrepancies like `invoice_1013`'s deliberate +$50.
+- **No true `manual_review` terminal state.** `requires_manual_review` is metadata today;
+  the graph still resolves to approved/rejected. A third outcome routing into a review queue
+  is the natural next step.
+- **Currency policy is light.** Non-USD is flagged, but there's no exchange-rate handling,
+  approved-foreign-vendor list, or per-currency escalation policy.
+- **Date grounding.** The approval LLM should be passed the real current date for
+  deterministic future-date reasoning.
+- **Payment is mocked** — no real rail, idempotency/retry, or reconciliation (intentional
+  for scope).
 
 ---
 
-## `invoice_1009.json` — data integrity failure
-
-This invoice demonstrates why validation is deterministic and separate from approval.
-
-### Problems detected
-
-* negative invoice total
-* negative quantity for `WidgetA`
-* missing vendor
-* missing due date
-
-### Final outcome
-
-Rejected.
-
----
-
-## `invoice_1013.pdf` — repeated items and PDF extraction
-
-This PDF contains repeated items, different order notes, and a large total.
-
-### Ingestion behavior
-
-The LLM extraction pulled out line items such as:
-
-* `WidgetA`
-* `WidgetB`
-* `GadgetX`
-* `WidgetA (Replacement)`
-* `GadgetX (Expedited)`
-* `GadgetX (Sample)`
-
-### Validation result
-
-Current behavior flags:
-
-* over-ordering on `WidgetA`
-* over-ordering on `WidgetB`
-* “unknown item” issues for annotated variants like `GadgetX (Expedited)`
-
-### Why this matters
-
-This is a good example of where the workflow is functional but still improvable:
-the invoice is clearly parseable, but the **SKU normalization layer** should collapse item variants like `GadgetX (Expedited)` back to base inventory keys such as `GadgetX`.
-
-### Final outcome
-
-Rejected.
-
----
-
-## `invoice_1014.xml` — non-USD invoice
-
-This invoice parses cleanly and validates structurally, but is denominated in **EUR** rather than USD.
-
-### Current behavior
-
-* validation passes with a warning
-* approval currently rejects the invoice due to currency mismatch
-
-### Intended business behavior
-
-In a production workflow, I would likely treat this as **manual review / escalation** rather than an automatic rejection, unless policy explicitly forbids non-USD payment.
-
-I’ve kept the current behavior visible as a known limitation / policy decision point rather than hiding it.
-
----
-
-## Design Decisions
-
-## Hybrid parsing instead of “LLM for everything”
-
-I intentionally split ingestion into:
-
-* **deterministic parsing** for JSON / CSV / XML
-* **LLM extraction** for TXT / PDF
-
-This keeps costs lower, makes structured formats more predictable, and still demonstrates where agentic extraction actually adds value.
-
-## Deterministic validation instead of LLM validation
-
-Inventory checks, quantity checks, and currency checks are business rules, not reasoning problems. I kept them deterministic for:
-
-* reliability
-* debuggability
-* reproducibility
-* lower cost
-
-## LLM approval with reflection
-
-Approval is where I wanted the system to be more agentic:
-
-* combine multiple weak signals
-* interpret fraud-style language
-* weigh validation issues in context
-* run a second critique / reflection pass before finalizing
-
-That gave me a workflow that is more than just “parser + if/else rules” without making every stage opaque.
-
----
-
-## Known Issues / Current Limitations
-
-### 1) Annotated SKU normalization is incomplete
-
-In invoices like `invoice_1013.pdf`, item variants such as:
-
-* `GadgetX (Expedited)`
-* `WidgetA (Replacement)`
-* `GadgetX (Sample)`
-
-should ideally be normalized back to:
-
-* `GadgetX`
-* `WidgetA`
-
-before inventory validation.
-
-Right now, those are treated as unknown items, which is conservative but not ideal.
-
----
-
-### 2) “Manual review” is represented as escalation metadata, not a final workflow branch
-
-The validation stage can mark invoices as requiring additional scrutiny, but the current workflow still resolves to a final approval decision of **approved** or **rejected**.
-
-If I extended the workflow, I would add a true third final state such as:
-
-* `approved`
-* `rejected`
-* `manual_review`
-
----
-
-### 3) Currency handling is policy-light
-
-The current system flags non-USD invoices and the approval stage may reject them, but there is not yet a formal currency policy layer for:
-
-* exchange-rate handling
-* approved foreign vendors
-* finance escalation rules by currency
-
----
-
-### 4) Approval reasoning can be overly strict on future-dated invoices
-
-In the current outputs, the approval stage treats some future-dated invoices as suspicious. Depending on the business context, that could be acceptable or overly conservative.
-
-I left this behavior visible because it is a real tradeoff between:
-
-* fraud sensitivity
-* operational false positives
-
----
-
-### 5) Payment is mocked
-
-This is intentional for the take-home scope, but it means:
-
-* no real payment API integration
-* no idempotency / retry logic
-* no ledgering or payment reconciliation
-
-### 6) Tests
-
-This is intentional for the take-home scope, but it means:
-
-* Run the offline test suite:
-
-````bash
-./venv/bin/python -m pytest -m "not integration"
-````
-
-
----
-
-## Future Improvements
-
-If I continued this beyond take-home scope, I would prioritize:
-
-### 1) A true manual-review branch
-
-Add a third final workflow outcome and route escalated invoices into a review queue instead of forcing a binary approve/reject.
-
-### 2) Better SKU normalization
-
-Normalize item variants such as:
-
-* `Widget A`
-* `WidgetA (Replacement)`
-* `GadgetX - Expedited`
-
-back to base inventory SKUs before stock validation.
-
-### 3) Better validation severity modeling
-
-Split validation findings into:
-
-* hard failures
-* review-required flags
-* informational warnings
-
-and feed those severities explicitly into approval.
-
-### 4) More automated tests
-
-Expand unit and integration coverage for:
-
-* structured parsers
-* LLM extraction fallbacks
-* repeated-item aggregation
-* approval edge cases
-
-### 5) Lightweight UI
-
-A Streamlit UI would make the workflow easier to demo by showing:
-
-* raw invoice input
-* parsed invoice output
-* validation issues
-* approval reasoning
-* payment status
-* log trail
-
----
-
-## Notes on Scope
-
-This project was built as a take-home MVP under ambiguity, so I deliberately optimized for:
-
-* **end-to-end functionality**
-* **clear separation of responsibilities by stage**
-* **showing agentic behavior where it matters**
-* **keeping the system runnable locally without external infrastructure**
-
-Rather than overbuilding a full AP platform, I focused on producing a workflow that is:
-
-* understandable
-* testable
-* extensible
-* and honest about where the next iteration should go.
+## 📝 Notes on scope
+
+Built as a take-home MVP under ambiguity, deliberately optimized for **end-to-end
+functionality**, **clear per-stage separation of responsibilities**, **agentic behavior
+where it actually matters**, and **a system that runs locally with zero external
+infrastructure** — understandable, testable, extensible, and honest about its edges.

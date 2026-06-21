@@ -4,3 +4,4 @@ anthropic
 pdfplumber
 python-dotenv
 pytest
+streamlit

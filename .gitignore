@@ -5,3 +5,4 @@ __pycache__/
 .DS_Store
 inventory.db
 test_anthropic.py
+.tmp_uploads/
