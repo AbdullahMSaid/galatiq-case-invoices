@@ -1,12 +1,3 @@
-Absolutely — here’s a **single README.md you can paste in as-is**. I wrote it to be:
-
-* **professional enough for a take-home reviewer**
-* **honest about the current implementation**
-* **aligned with the outputs you showed**
-* **easy for you to defend in an interview**
-
----
-
 ````markdown
 # Galatiq Invoice Processing Workflow
 
