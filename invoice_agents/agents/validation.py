@@ -9,16 +9,25 @@ from invoice_agents.state import InvoiceState
 from invoice_agents.tools.inventory import fetch_inventory
 
 
+# Trailing annotation words that describe the order, not the SKU itself, so they
+# are dropped before the inventory lookup ("GadgetX Expedited" -> "GadgetX").
+_ANNOTATIONS = {"replacement", "expedited", "sample", "rush", "order"}
+
+
 def _canonical(name: str) -> str:
     """Fold an invoice item name to a key comparable against inventory.
 
     Strips parenthetical qualifiers ("WidgetA (Volume Discount)" -> "WidgetA"),
-    removes spacing ("Widget A" -> "WidgetA"), and lowercases -- so OCR and
-    quoting variants all match the same inventory row.
+    drops trailing annotation words ("WidgetA Replacement" -> "WidgetA"),
+    removes spacing ("Widget A" -> "WidgetA"), and lowercases -- so OCR, quoting,
+    and annotation variants all match the same inventory row. Truly unknown items
+    ("WidgetC") are left intact so they still fail the lookup.
     """
     name = re.sub(r"\(.*?\)", "", name)   # drop "(Volume Discount)", "(rush order)", ...
-    name = re.sub(r"\s+", "", name)        # "Widget A" -> "WidgetA"
-    return name.lower()
+    tokens = name.split()
+    while tokens and tokens[-1].lower() in _ANNOTATIONS:
+        tokens.pop()                       # "GadgetX Expedited" -> "GadgetX"
+    return "".join(tokens).lower()         # "Widget A" -> "widgeta"
 
 
 def validate(state: InvoiceState) -> dict:
@@ -33,7 +42,7 @@ def validate(state: InvoiceState) -> dict:
         issues.append("No line items were extracted from the invoice.")
 
     if not parsed.get("vendor"):
-        warnings.append("No vendor name on the invoice.")
+        issues.append("No vendor name on the invoice.")
 
     total = parsed.get("total_amount")
     if total is None:

@@ -3,3 +3,4 @@ langchain-anthropic
 anthropic
 pdfplumber
 python-dotenv
+pytest

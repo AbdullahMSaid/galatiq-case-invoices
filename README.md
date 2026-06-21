@@ -563,6 +563,17 @@ This is intentional for the take-home scope, but it means:
 * no idempotency / retry logic
 * no ledgering or payment reconciliation
 
+### 6) Tests
+
+This is intentional for the take-home scope, but it means:
+
+* Run the offline test suite:
+
+````bash
+./venv/bin/python -m pytest -m "not integration"
+````
+
+
 ---
 
 ## Future Improvements
