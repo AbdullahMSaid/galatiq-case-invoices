@@ -1,0 +1,7 @@
+.env
+venv/
+.claude/
+__pycache__/
+.DS_Store
+inventory.db
+test_anthropic.py
