@@ -630,11 +630,3 @@ Rather than overbuilding a full AP platform, I focused on producing a workflow t
 * testable
 * extensible
 * and honest about where the next iteration should go.
-
-```
-
----
-
-If you want, the next thing I’d do is a **second pass that makes this README more concise and more “senior solutions engineer / founder” sounding**—same content, but tighter and more impressive for a hiring team skimming it in 2 minutes.
-```
-
